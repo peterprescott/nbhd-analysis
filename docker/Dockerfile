@@ -12,5 +12,6 @@ RUN jupyter labextension install @axlair/jupyterlab_vim \
 
 RUN pip install git+https://github.com/peterprescott/nbhd
 
+
 # run jupyter lab
 CMD jupyter lab --no-browser --allow-root --NotebookApp.token='secret'
