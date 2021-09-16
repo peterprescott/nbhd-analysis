@@ -1,0 +1,32 @@
+
+version: '3'
+
+services:
+  postgres:
+    image: postgis/postgis:13-3.1
+    environment:
+      - POSTGRES_DB=nbhd
+      - POSTGRES_PASSWORD=topsecret
+      - POSTGRES_USER=piprescott
+    ports:
+      - 5432:5432
+    restart: always
+ 
+  jupyter:
+    image: peterprescott/gds:0.1
+    environment:
+      - DB_HOSTNAME=postgres
+      - DB_USERNAME=piprescott
+      - DB_PASSWORD=topsecret
+      - DB_DATABASE=nbhd
+      - DB_PORT=5432
+    ports:
+      - 8888:8888
+    volumes:
+      - ../code:/home/jovyan/code
+      - ../data:/home/jovyan/data
+      - ../csv:/home/jovyan/csv
+      - ../fig:/home/jovyan/fig
+    restart: always
+
+
