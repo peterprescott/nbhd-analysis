@@ -3,8 +3,8 @@
 #   jupytext:
 #     text_representation:
 #       extension: .py
-#       format_name: percent
-#       format_version: '1.3'
+#       format_name: light
+#       format_version: '1.5'
 #       jupytext_version: 1.12.0
 #   kernelspec:
 #     display_name: Python 3
@@ -12,15 +12,17 @@
 #     name: python3
 # ---
 
-# %%
+# +
 import networkx as nx
+import pandas as pd
 import geopandas as gpd
 from shapely.geometry import Polygon
 
 from nbhd import data, geometry, utils
 
 
-# %%
+# -
+
 def get_translator(df, first_column="first", second_column="second"):
     graph = nx.from_pandas_edgelist(df, first_column, second_column)
     subgraphs = [graph.subgraph(c) for c in nx.connected_components(graph)]
@@ -28,7 +30,6 @@ def get_translator(df, first_column="first", second_column="second"):
     return translator
 
 
-# %%
 def sounds_institutional(local_type):
 
     words = [
@@ -45,12 +46,11 @@ def sounds_institutional(local_type):
     return any([w.lower() in local_type.lower() for w in words])
 
 
-# %%
 db = data.Base()
 pixel = utils.get_pixel("l13 7eq", db)
 
 
-# %%
+# +
 def calculate_nonparametric_features(pixel: Polygon, db: data.Base):
     """Calculate non-parametric features.
 
@@ -170,14 +170,57 @@ def add_building_types(dataframe: pd.DataFrame, pixel: Polygon,
     return dataframe
 
 
-# %%
+# -
+
+df = calculate_nonparametric_features(pixel, db)
+
+df.loc[~df.buildings_id.duplicated()].institution.value_counts()
+
+
+# +
+# for given faceblock
+# find number of neighbouring faceblocks
+# find number of properties on neighbouring faceblocks
+
+def count_neighbours(row, df):
+    
+    df = df.loc[~df.roads_id.duplicated()].copy()
+    start, end = row.startNode, row.endNode
+    df = df.loc[(df.startNode==start) | (df.startNode==end) | (df.endNode==start) | (df.endNode==end)]
+    df = df.loc[df.roads_id!=row.roads_id]
+    neighbouring_faceblocks = len(df)
+    properties_on_neighbouring_faceblocks = df.properties_on_road.sum()
+    
+    return pd.Series({'roads_id':row.roads_id, 
+                      'neighbouring_faceblocks': neighbouring_faceblocks,
+           'properties_on_neighbouring_faceblocks': properties_on_neighbouring_faceblocks})
+
+
+# +
 roads = db.intersects("roads", pixel)
 
 nn_pr = db.knn(
     "properties",
     "roads",
-    t2_columns=['"startNode"', '"endNode"', "name1"],
+    t2_columns=['"startNode"', '"endNode"', "name1", "length", 'road_function'],
     polygon=pixel,
 )
-nn_pr.value_counts("roads_id")
-nn_pr.name1
+property_counts_dict = dict(nn_pr.value_counts('roads_id'))
+nn_pr['properties_on_road'] = nn_pr.roads_id.apply(lambda x: property_counts_dict.get(x,0))
+nn_pr['length_per_property'] = nn_pr.length / nn_pr.properties_on_road
+nn_pr['log_length_per_property'] = np.log(nn_pr.length_per_property)
+neighbours = nn_pr.loc[~nn_pr.roads_id.duplicated()].apply(axis=1, func=lambda row: count_neighbours(row,nn_pr))
+# -
+
+nn_pr = nn_pr.merge(neighbours, on='roads_id')
+
+roads = roads.rename(columns={'id':'roads_id'})
+roads = roads[[c for c in nn_pr.columns if c in roads.columns]]
+
+roads
+
+
+
+
+
+
