@@ -197,6 +197,36 @@ def count_neighbours(row, df):
 
 
 # +
+def get_faceblock_stats(pixel):
+    roads = db.intersects("roads", pixel)
+    roads = roads[['id', 'startNode', 'endNode', 'name1', 'length', 'road_function', 'geometry']]
+    roads = roads.rename(columns={'id':'roads_id'})
+
+    nn_pr = db.knn(
+        "properties",
+        "roads",
+        polygon=pixel,
+    )
+
+    roads = roads.merge(nn_pr, on='roads_id', how='outer')
+
+    property_counts_dict = dict(nn_pr.value_counts('roads_id'))
+    roads['properties_on_road'] = roads.roads_id.apply(lambda x: property_counts_dict.get(x,0))
+    roads['length_per_property'] = roads.length / roads.properties_on_road
+    roads['log_length_per_property'] = np.log(roads.length_per_property)
+    neighbours = roads.loc[~roads.roads_id.duplicated()].apply(axis=1, func=lambda row: count_neighbours(row,roads))
+
+    roads = roads.merge(neighbours, on='roads_id', how='outer')
+
+    roads['building'] = roads.properties_id.apply(lambda x: p_bdg.get(x, None))
+
+    building_counts_dict = dict(roads.groupby('roads_id').building.nunique())
+    roads['buildings_on_road'] = roads.roads_id.apply(lambda x: building_counts_dict.get(x,0))
+    
+    return roads
+
+
+# + 
 roads = db.intersects("roads", pixel)
 
 nn_pr = db.knn(
